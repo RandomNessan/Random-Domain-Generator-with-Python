@@ -14,10 +14,12 @@ PROTOCOL_PREFIX_MAP = {
     "anytls": "at",
     "trojan": "tj",
     "v2node": "vn",
+    "empty": ""   # 无前缀
 }
 
-# 国家列表（ISO 3166-1 alpha-2）
+# 国家列表（ISO 3166-1 alpha-2，含 empty）
 COUNTRIES = [
+    ("empty", ""),
     ("Afghanistan", "AF"),
     ("Åland Islands", "AX"),
     ("Albania", "AL"),
@@ -275,6 +277,7 @@ def random_string(length: int) -> str:
     chars = string.ascii_letters + string.digits
     return "".join(random.choice(chars) for _ in range(length))
 
+
 def generate_domains(protocol: str,
                      country_code: str,
                      main_domain: str,
@@ -283,9 +286,12 @@ def generate_domains(protocol: str,
                      use_dash: bool) -> list:
     """组合生成随机域名列表"""
     result = []
-    prefix = PROTOCOL_PREFIX_MAP.get(protocol)
-    if not prefix:
+
+    # 允许 empty 协议（前缀为空字符串）
+    if protocol not in PROTOCOL_PREFIX_MAP:
         raise ValueError("未知协议: " + protocol)
+
+    prefix = PROTOCOL_PREFIX_MAP[protocol]
 
     # 主域名简单清理一下前后空格和前导点
     main_domain = main_domain.strip()
@@ -295,17 +301,53 @@ def generate_domains(protocol: str,
     if not main_domain:
         raise ValueError("主域名不能为空")
 
+    # 统一大写国家代码（传进来就是大写，但这里再稳一下）
+    country_code = (country_code or "").upper()
+
     for _ in range(count):
         obf = random_string(obf_len)
-        if use_dash:
-            # 形如: h2-X8fK29qaL1Dp-US.airando.icu
-            full_host = f"{prefix}-{obf}-{country_code}.{main_domain}"
+
+        # 四种情况：
+        # 1) prefix == "" 且 country_code == ""
+        # 2) prefix == "" 且 country_code != ""
+        # 3) prefix != "" 且 country_code == ""
+        # 4) prefix != "" 且 country_code != ""
+        if prefix == "":
+            # 无协议前缀
+            if country_code == "":
+                # 没有国家，直接 obf.domain
+                full_host = f"{obf}.{main_domain}"
+            else:
+                # 有国家
+                if use_dash:
+                    # X8fK29qaL1Dp-US.domain
+                    full_host = f"{obf}-{country_code}.{main_domain}"
+                else:
+                    # X8fK29qaL1DpUS.domain
+                    full_host = f"{obf}{country_code}.{main_domain}"
         else:
-            # 形如: h2X8fK29qaL1DpUS.airando.icu
-            full_host = f"{prefix}{obf}{country_code}.{main_domain}"
+            # 有协议前缀
+            if country_code == "":
+                # 没有国家
+                if use_dash:
+                    # h2-X8fK29qaL1Dp.domain
+                    full_host = f"{prefix}-{obf}.{main_domain}"
+                else:
+                    # h2X8fK29qaL1Dp.domain
+                    full_host = f"{prefix}{obf}.{main_domain}"
+            else:
+                # 有国家
+                if use_dash:
+                    # h2-X8fK29qaL1Dp-US.domain
+                    full_host = f"{prefix}-{obf}-{country_code}.{main_domain}"
+                else:
+                    # h2X8fK29qaL1DpUS.domain
+                    full_host = f"{prefix}{obf}{country_code}.{main_domain}"
+
         result.append(full_host)
 
     return result
+
 
 class DomainGeneratorApp(tk.Tk):
     def __init__(self):
@@ -345,7 +387,7 @@ class DomainGeneratorApp(tk.Tk):
         )
         self.country_combo.grid(row=1, column=1, padx=5, pady=5, sticky="w")
         if country_display_list:
-            self.country_combo.current(0)
+            self.country_combo.current(0)  # 默认选 empty ()
 
         # 主域名
         ttk.Label(frame, text="主域名 (Main domain):").grid(row=2, column=0, padx=5, pady=5, sticky="e")
@@ -377,7 +419,7 @@ class DomainGeneratorApp(tk.Tk):
         )
         self.count_spin.grid(row=4, column=1, padx=5, pady=5, sticky="w")
 
-        # 是否使用 "-"
+        # 是否使用 "-"`
         self.use_dash_var = tk.BooleanVar(value=True)
         self.use_dash_check = ttk.Checkbutton(
             frame,
@@ -396,7 +438,7 @@ class DomainGeneratorApp(tk.Tk):
         self.copy_btn = ttk.Button(btn_frame, text="复制全部到剪贴板", command=self.copy_to_clipboard)
         self.copy_btn.pack(side=tk.LEFT, padx=5)
 
-        # 按钮：生成域名解析模板
+        # 新按钮：生成域名解析模板
         self.dns_template_btn = ttk.Button(
             btn_frame,
             text="生成域名解析模板",
@@ -428,7 +470,7 @@ class DomainGeneratorApp(tk.Tk):
                 messagebox.showwarning("警告", "请选择地区/国家")
                 return
 
-            # 从 "United States (US)" 中提取 "US"
+            # 从 "United States (US)" / "empty ()" 中提取括号里的内容
             country_code = country_display.split("(")[-1].split(")")[0].strip().upper()
 
             main_domain = self.domain_var.get()
@@ -489,7 +531,6 @@ class DomainGeneratorApp(tk.Tk):
         domain_var = tk.StringVar()
         domain_entry = ttk.Entry(input_frame, textvariable=domain_var, width=40)
         domain_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        # 如果主界面有已经生成的域名，可以手动复制粘贴到这里
 
         # 记录类型
         ttk.Label(input_frame, text="记录类型（Type）:").grid(row=1, column=0, padx=5, pady=5, sticky="e")
@@ -537,7 +578,6 @@ class DomainGeneratorApp(tk.Tk):
 
             # 处理 IP / 目标，多行或逗号分隔
             raw_ips = ip_text.get("1.0", tk.END)
-            # 支持逗号和换行分隔
             raw_ips = raw_ips.replace(",", "\n")
             items = [x.strip() for x in raw_ips.splitlines() if x.strip()]
             if not items:
@@ -546,7 +586,6 @@ class DomainGeneratorApp(tk.Tk):
 
             comment = comment_var.get().strip()
 
-            # 域名统一加一个尾部的点
             if not host.endswith("."):
                 host_out = host + "."
             else:
