@@ -237,7 +237,7 @@ COUNTRIES = [
     ("Sweden", "SE"),
     ("Switzerland", "CH"),
     ("Syrian Arab Republic", "SY"),
-    ("Taiwan (Province of China)", "TW"),
+    ("Taiwan", "TW"),
     ("Tajikistan", "TJ"),
     ("Tanzania", "TZ"),
     ("Thailand", "TH"),
@@ -273,8 +273,8 @@ COUNTRIES = [
 
 
 def random_string(length: int) -> str:
-    """生成指定长度的字母数字混合字符串"""
-    chars = string.ascii_letters + string.digits
+    """生成指定长度的字母数字混合字符串（全部小写字母 + 数字）"""
+    chars = string.ascii_lowercase + string.digits
     return "".join(random.choice(chars) for _ in range(length))
 
 
@@ -284,28 +284,28 @@ def generate_domains(protocol: str,
                      obf_len: int,
                      count: int,
                      use_dash: bool) -> list:
-    """组合生成随机域名列表"""
+    """组合生成随机域名列表，最终全部转为小写"""
     result = []
 
     # 允许 empty 协议（前缀为空字符串）
     if protocol not in PROTOCOL_PREFIX_MAP:
         raise ValueError("未知协议: " + protocol)
 
-    prefix = PROTOCOL_PREFIX_MAP[protocol]
+    prefix = PROTOCOL_PREFIX_MAP[protocol]  # 已经是小写
 
-    # 主域名简单清理一下前后空格和前导点
+    # 主域名简单清理一下前后空格和前导点，并统一小写
     main_domain = main_domain.strip()
     if main_domain.startswith("."):
         main_domain = main_domain[1:]
-
     if not main_domain:
         raise ValueError("主域名不能为空")
+    main_domain = main_domain.lower()
 
-    # 统一大写国家代码（传进来就是大写，但这里再稳一下）
-    country_code = (country_code or "").upper()
+    # 国家代码统一小写
+    country_code = (country_code or "").lower()
 
     for _ in range(count):
-        obf = random_string(obf_len)
+        obf = random_string(obf_len)  # 已是小写+数字
 
         # 四种情况：
         # 1) prefix == "" 且 country_code == ""
@@ -320,31 +320,32 @@ def generate_domains(protocol: str,
             else:
                 # 有国家
                 if use_dash:
-                    # X8fK29qaL1Dp-US.domain
+                    # x8fk29qal1dp-us.domain
                     full_host = f"{obf}-{country_code}.{main_domain}"
                 else:
-                    # X8fK29qaL1DpUS.domain
+                    # x8fk29qal1dpus.domain
                     full_host = f"{obf}{country_code}.{main_domain}"
         else:
             # 有协议前缀
             if country_code == "":
                 # 没有国家
                 if use_dash:
-                    # h2-X8fK29qaL1Dp.domain
+                    # h2-x8fk29qal1dp.domain
                     full_host = f"{prefix}-{obf}.{main_domain}"
                 else:
-                    # h2X8fK29qaL1Dp.domain
+                    # h2x8fk29qal1dp.domain
                     full_host = f"{prefix}{obf}.{main_domain}"
             else:
                 # 有国家
                 if use_dash:
-                    # h2-X8fK29qaL1Dp-US.domain
+                    # h2-x8fk29qal1dp-us.domain
                     full_host = f"{prefix}-{obf}-{country_code}.{main_domain}"
                 else:
-                    # h2X8fK29qaL1DpUS.domain
+                    # h2x8fk29qal1dpus.domain
                     full_host = f"{prefix}{obf}{country_code}.{main_domain}"
 
-        result.append(full_host)
+        # 再保险：全域名统一转小写
+        result.append(full_host.lower())
 
     return result
 
@@ -419,11 +420,11 @@ class DomainGeneratorApp(tk.Tk):
         )
         self.count_spin.grid(row=4, column=1, padx=5, pady=5, sticky="w")
 
-        # 是否使用 "-"`
+        # 是否使用 "-"
         self.use_dash_var = tk.BooleanVar(value=True)
         self.use_dash_check = ttk.Checkbutton(
             frame,
-            text="参数之间使用 '-' 分隔 (例如: h2-xxxx-US.domain)",
+            text="参数之间使用 '-' 分隔 (例如: h2-xxxx-us.domain)",
             variable=self.use_dash_var
         )
         self.use_dash_check.grid(row=5, column=0, columnspan=2, padx=5, pady=5, sticky="w")
@@ -471,7 +472,7 @@ class DomainGeneratorApp(tk.Tk):
                 return
 
             # 从 "United States (US)" / "empty ()" 中提取括号里的内容
-            country_code = country_display.split("(")[-1].split(")")[0].strip().upper()
+            country_code = country_display.split("(")[-1].split(")")[0].strip()
 
             main_domain = self.domain_var.get()
             if not main_domain.strip():
